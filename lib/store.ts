@@ -7,6 +7,7 @@ import type {
   Team,
   VoterToken,
   JudgeToken,
+  BonusVoter,
   Settings,
   Standings,
 } from "./types";
@@ -17,6 +18,7 @@ const K_VOTERS = "voters"; // hash: token  -> JSON(VoterToken)
 const K_VOTER_USED = "voter_used"; // hash: token -> ts（原子 dedup）
 const K_VOTES = "votes"; // hash: teamId -> 票數
 const K_JUDGES = "judges"; // hash: token  -> JSON(JudgeToken)
+const K_BONUS = "bonus"; // hash: id -> JSON(BonusVoter)
 const K_SETTINGS = "settings"; // JSON(Settings)
 
 const DEFAULT_SETTINGS: Settings = { votingOpen: false, resultsPublic: false };
@@ -129,6 +131,36 @@ export async function getVoterToken(token: string): Promise<VoterToken | null> {
 }
 
 /**
+ * 刪除（作廢）一張投票券。若已投過票，連同它投的票扣回並釋放 used 記錄，
+ * 等於完整撤銷這張票的效果。
+ */
+export async function deleteVoterToken(token: string): Promise<ActionResult> {
+  const kv = await getKv();
+  const voter = await getVoterToken(token);
+  if (!voter) return fail("找不到該投票券", 404);
+  if (voter.usedAt) {
+    for (const id of voter.votes) await kv.hIncrBy(K_VOTES, id, -1);
+    await kv.hDel(K_VOTER_USED, token);
+  }
+  await kv.hDel(K_VOTERS, token);
+  return ok(undefined);
+}
+
+/** 批次清除投票券：scope="unused" 只清未使用；"all" 全部清（含已投的，票數會扣回）。 */
+export async function clearVoterTokens(
+  scope: "unused" | "all",
+): Promise<number> {
+  const tokens = await listVoterTokens();
+  let removed = 0;
+  for (const t of tokens) {
+    if (scope === "unused" && t.usedAt) continue;
+    const r = await deleteVoterToken(t.token);
+    if (r.ok) removed++;
+  }
+  return removed;
+}
+
+/**
  * 投票：驗證 → 原子標記已用 → 累加票數。
  * 規則：投票須開放、token 存在且未用、恰投 votesPerBallot 票、作品互異且存在。
  */
@@ -191,6 +223,15 @@ export async function getJudgeToken(token: string): Promise<JudgeToken | null> {
   return kv.hGetJSON<JudgeToken>(K_JUDGES, token);
 }
 
+/** 刪除一位神秘客（連同其評分，計分時自然不再計入）。 */
+export async function deleteJudgeToken(token: string): Promise<ActionResult> {
+  const kv = await getKv();
+  const judge = await getJudgeToken(token);
+  if (!judge) return fail("找不到該神秘客", 404);
+  await kv.hDel(K_JUDGES, token);
+  return ok(undefined);
+}
+
 function validateScores(
   scores: Record<string, Record<string, number>>,
 ): string | null {
@@ -238,6 +279,77 @@ export async function setSettings(
   return merged;
 }
 
+// ── Bonus voters（加分同仁：加權票，併入公開投票）─────────────
+export async function listBonusVoters(): Promise<BonusVoter[]> {
+  const kv = await getKv();
+  const all = await kv.hGetAllJSON<BonusVoter>(K_BONUS);
+  return Object.values(all).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function createBonusVoter(
+  name: string,
+  budget: number,
+): Promise<ActionResult<BonusVoter>> {
+  const nm = name.trim();
+  if (!nm) return fail("請填加分同仁名稱", 400);
+  const b = Math.floor(Number(budget));
+  if (!Number.isFinite(b) || b < 1) return fail("票數需為 1 以上的整數", 400);
+  const kv = await getKv();
+  const bv: BonusVoter = {
+    id: nanoid(8),
+    name: nm,
+    budget: b,
+    allocations: {},
+    createdAt: Date.now(),
+  };
+  await kv.hSetJSON(K_BONUS, bv.id, bv);
+  return ok(bv);
+}
+
+/** 更新某位加分同仁把票分配給哪些隊（總和不得超過其 budget）。 */
+export async function setBonusAllocations(
+  id: string,
+  allocations: Record<string, number>,
+): Promise<ActionResult<BonusVoter>> {
+  const kv = await getKv();
+  const bv = await kv.hGetJSON<BonusVoter>(K_BONUS, id);
+  if (!bv) return fail("找不到該加分同仁", 404);
+  const clean: Record<string, number> = {};
+  let sum = 0;
+  for (const [teamId, v] of Object.entries(allocations)) {
+    const n = Math.max(0, Math.floor(Number(v) || 0));
+    if (n > 0) {
+      clean[teamId] = n;
+      sum += n;
+    }
+  }
+  if (sum > bv.budget)
+    return fail(`分配票數（${sum}）超過上限 ${bv.budget}`, 400);
+  const updated: BonusVoter = { ...bv, allocations: clean };
+  await kv.hSetJSON(K_BONUS, id, updated);
+  return ok(updated);
+}
+
+export async function deleteBonusVoter(id: string): Promise<ActionResult> {
+  const kv = await getKv();
+  const bv = await kv.hGetJSON<BonusVoter>(K_BONUS, id);
+  if (!bv) return fail("找不到該加分同仁", 404);
+  await kv.hDel(K_BONUS, id);
+  return ok(undefined);
+}
+
+/** 彙總每隊獲得的加分票（併入公開投票）。 */
+export async function bonusVotesByTeam(): Promise<Record<string, number>> {
+  const voters = await listBonusVoters();
+  const totals: Record<string, number> = {};
+  for (const v of voters) {
+    for (const [teamId, n] of Object.entries(v.allocations)) {
+      totals[teamId] = (totals[teamId] ?? 0) + n;
+    }
+  }
+  return totals;
+}
+
 // ── Results ───────────────────────────────────────────────
 /** 由所有神秘客紀錄彙總每隊原始總分（上限 JUDGE_MAX_TOTAL）。 */
 export async function judgeTotalsByTeam(): Promise<Record<string, number>> {
@@ -257,12 +369,17 @@ export async function judgeTotalsByTeam(): Promise<Record<string, number>> {
 
 export async function getStandings(): Promise<Standings> {
   const kv = await getKv();
-  const [teams, voteCounts, judgeTotals] = await Promise.all([
+  const [teams, voteCounts, judgeTotals, bonus] = await Promise.all([
     listTeams(),
     kv.hGetAllNumbers(K_VOTES),
     judgeTotalsByTeam(),
+    bonusVotesByTeam(),
   ]);
-  return computeStandings(teams, voteCounts, judgeTotals);
+  // 加分同仁的票併入公開投票（隊伍票數與總有效票數皆納入）。
+  const merged: Record<string, number> = { ...voteCounts };
+  for (const [teamId, n] of Object.entries(bonus))
+    merged[teamId] = (merged[teamId] ?? 0) + n;
+  return computeStandings(teams, merged, judgeTotals);
 }
 
 export { JUDGE_MAX_TOTAL };

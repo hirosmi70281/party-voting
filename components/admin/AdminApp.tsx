@@ -9,6 +9,7 @@ import {
   TeamsPanel,
   VotersPanel,
   JudgesPanel,
+  BonusPanel,
   SettingsPanel,
   ResultsPanel,
 } from "./panels";
@@ -18,6 +19,7 @@ const TABS = [
   { key: "teams", label: "隊伍" },
   { key: "voters", label: "投票券" },
   { key: "judges", label: "神秘客" },
+  { key: "bonus", label: "加分" },
   { key: "results", label: "結果" },
   { key: "settings", label: "設定" },
 ] as const;
@@ -101,6 +103,7 @@ export function AdminApp() {
           {tab === "teams" && <TeamsPanel data={data} reload={reload} />}
           {tab === "voters" && <VotersPanel data={data} reload={reload} />}
           {tab === "judges" && <JudgesPanel data={data} reload={reload} />}
+          {tab === "bonus" && <BonusPanel data={data} reload={reload} />}
           {tab === "results" && <ResultsPanel data={data} />}
           {tab === "settings" && <SettingsPanel data={data} reload={reload} />}
         </>

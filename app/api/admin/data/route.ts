@@ -5,6 +5,7 @@ import {
   listTeams,
   listVoterTokens,
   listJudgeTokens,
+  listBonusVoters,
   getSettings,
   getStandings,
 } from "@/lib/store";
@@ -15,15 +16,23 @@ export async function GET(req: Request) {
   if (!isAdminRequest(req))
     return NextResponse.json({ error: "未授權" }, { status: 401 });
 
-  const [teams, voterTokens, judgeTokens, settings, standings, baseUrl] =
-    await Promise.all([
-      listTeams(),
-      listVoterTokens(),
-      listJudgeTokens(),
-      getSettings(),
-      getStandings(),
-      resolveBaseUrl(),
-    ]);
+  const [
+    teams,
+    voterTokens,
+    judgeTokens,
+    bonusVoters,
+    settings,
+    standings,
+    baseUrl,
+  ] = await Promise.all([
+    listTeams(),
+    listVoterTokens(),
+    listJudgeTokens(),
+    listBonusVoters(),
+    getSettings(),
+    getStandings(),
+    resolveBaseUrl(),
+  ]);
 
   const usedCount = voterTokens.filter((t) => t.usedAt).length;
 
@@ -31,6 +40,7 @@ export async function GET(req: Request) {
     teams,
     voterTokens,
     judgeTokens,
+    bonusVoters,
     settings,
     standings,
     baseUrl,

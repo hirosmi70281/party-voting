@@ -29,6 +29,15 @@ export interface JudgeToken {
   scores: Record<string, Record<JudgeCriterionKey, number>>;
 }
 
+/** 加分同仁（加權投票者）：有固定票數額度，可分散投給各隊，併入公開投票。 */
+export interface BonusVoter {
+  id: string;
+  name: string; // 例：TOP1
+  budget: number; // 可投票數上限，例：8
+  allocations: Record<string, number>; // teamId -> 分配票數
+  createdAt: number;
+}
+
 /** 活動設定 */
 export interface Settings {
   votingOpen: boolean; // 公開投票是否開放

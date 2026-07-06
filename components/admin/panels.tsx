@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { config, JUDGE_MAX_PER_JUDGE, type JudgeCriterionKey } from "@/lib/config";
-import type { Team, JudgeToken } from "@/lib/types";
+import type { Team, JudgeToken, BonusVoter } from "@/lib/types";
 import { Notice } from "@/components/ui";
 import { StandingsTable } from "@/components/StandingsTable";
 import { QrImg, CopyLink } from "./QrImg";
@@ -43,11 +43,21 @@ function Btn({
   );
 }
 
-function DeleteButton({ onDelete }: { onDelete: () => void }) {
+function DeleteButton({
+  onDelete,
+  label = "刪除",
+  confirmLabel = "確定刪除?",
+  tone = "danger",
+}: {
+  onDelete: () => void;
+  label?: string;
+  confirmLabel?: string;
+  tone?: "danger" | "neutral";
+}) {
   const [armed, setArmed] = useState(false);
   return (
-    <Btn tone="danger" small onClick={() => (armed ? onDelete() : setArmed(true))}>
-      {armed ? "確定刪除?" : "刪除"}
+    <Btn tone={tone} small onClick={() => (armed ? onDelete() : setArmed(true))}>
+      {armed ? confirmLabel : label}
     </Btn>
   );
 }
@@ -291,15 +301,28 @@ export function VotersPanel({
         </p>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
           共 {data.voterTokens.length} 張，已投{" "}
           {data.voterTokens.filter((t) => t.usedAt).length} 張
         </p>
         {data.voterTokens.length > 0 && (
-          <Btn tone="neutral" small onClick={exportCsv}>
-            匯出 CSV
-          </Btn>
+          <div className="flex flex-wrap gap-2">
+            <Btn tone="neutral" small onClick={exportCsv}>
+              匯出 CSV
+            </Btn>
+            {data.voterTokens.some((t) => !t.usedAt) && (
+              <DeleteButton
+                tone="neutral"
+                label="清除未使用"
+                confirmLabel="確定清除未使用?"
+                onDelete={async () => {
+                  await adminApi.clearVoterTokens("unused");
+                  await reload();
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
 
@@ -323,6 +346,14 @@ export function VotersPanel({
               </span>
               <CopyLink url={voteUrl(data.baseUrl, t.token)} />
             </div>
+            <DeleteButton
+              label={t.usedAt ? "作廢" : "刪除"}
+              confirmLabel="確定?"
+              onDelete={async () => {
+                await adminApi.deleteVoterToken(t.token);
+                await reload();
+              }}
+            />
           </div>
         ))}
       </div>
@@ -395,9 +426,17 @@ function JudgeCard({
             {judge.submittedAt ? "● 已評分" : "○ 尚未評分"}
           </p>
         </div>
-        <Btn tone="neutral" small onClick={() => setOpen((o) => !o)}>
-          {open ? "收合" : "代輸入分數"}
-        </Btn>
+        <div className="flex shrink-0 gap-2">
+          <Btn tone="neutral" small onClick={() => setOpen((o) => !o)}>
+            {open ? "收合" : "代輸入分數"}
+          </Btn>
+          <DeleteButton
+            onDelete={async () => {
+              await adminApi.deleteJudge(judge.token);
+              await reload();
+            }}
+          />
+        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-3">
@@ -551,6 +590,165 @@ function ToggleRow({
           }`}
         />
       </button>
+    </div>
+  );
+}
+
+// ── 加分同仁 ──────────────────────────────────────────────
+export function BonusPanel({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [budget, setBudget] = useState(8);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function add() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminApi.createBonus(name, budget);
+      setName("");
+      await reload();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Notice tone="info">
+        加分同仁是「加權投票者」：各有固定票數，可分散投給不同隊伍，票數會
+        <b>併入公開投票</b>（隊伍得票與總有效票數皆計入）。例：TOP1=8、TOP2=5、TOP3=3。
+      </Notice>
+
+      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <p className="font-semibold">新增加分同仁</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input flex-1"
+            placeholder="名稱，例：TOP1"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <label className="text-sm">票數</label>
+          <input
+            type="number"
+            min={1}
+            className="input w-24"
+            value={budget}
+            onChange={(e) => setBudget(Number(e.target.value))}
+          />
+          <Btn onClick={add} disabled={busy}>
+            {busy ? "新增中…" : "新增"}
+          </Btn>
+        </div>
+        {err && <Notice tone="error">{err}</Notice>}
+      </div>
+
+      {data.teams.length === 0 && (
+        <Notice tone="warn">請先在「隊伍」分頁建立隊伍，才能分配加分票。</Notice>
+      )}
+
+      {data.bonusVoters.map((bv) => (
+        <BonusCard key={bv.id} bonus={bv} teams={data.teams} reload={reload} />
+      ))}
+    </div>
+  );
+}
+
+function BonusCard({
+  bonus,
+  teams,
+  reload,
+}: {
+  bonus: BonusVoter;
+  teams: Team[];
+  reload: () => Promise<void>;
+}) {
+  const [alloc, setAlloc] = useState<Record<string, number>>(() => {
+    const a: Record<string, number> = {};
+    for (const t of teams) a[t.id] = bonus.allocations[t.id] ?? 0;
+    return a;
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const used = Object.values(alloc).reduce((s, n) => s + (n || 0), 0);
+  const remaining = bonus.budget - used;
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.setBonusAllocations(bonus.id, alloc);
+      setMsg("已儲存");
+      await reload();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">{bonus.name}</p>
+          <p className="text-xs text-neutral-500">
+            額度 {bonus.budget} 票 ｜ 已分配{" "}
+            <b className={remaining < 0 ? "text-red-600" : "text-brand"}>{used}</b> ｜
+            剩 {remaining}
+          </p>
+        </div>
+        <DeleteButton
+          onDelete={async () => {
+            await adminApi.deleteBonus(bonus.id);
+            await reload();
+          }}
+        />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {teams.map((t) => (
+          <div key={t.id} className="flex items-center gap-3">
+            <span className="min-w-0 flex-1 truncate text-sm">
+              《{t.title}》
+              <span className="text-neutral-500"> {t.name}</span>
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={bonus.budget}
+              className="input w-20"
+              value={alloc[t.id] ?? 0}
+              onChange={(e) =>
+                setAlloc((cur) => ({
+                  ...cur,
+                  [t.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                }))
+              }
+            />
+          </div>
+        ))}
+      </div>
+
+      {remaining < 0 && (
+        <Notice tone="error">分配票數超過額度 {bonus.budget}，請調整。</Notice>
+      )}
+      {msg && <Notice tone="info">{msg}</Notice>}
+      <div className="mt-3">
+        <Btn onClick={save} disabled={busy || remaining < 0}>
+          {busy ? "儲存中…" : "儲存分配"}
+        </Btn>
+      </div>
     </div>
   );
 }
