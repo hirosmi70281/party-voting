@@ -1,38 +1,38 @@
 import Link from "next/link";
 import { config } from "@/lib/config";
-import { getSettings } from "@/lib/store";
+import { getSettings, listBonusVoters } from "@/lib/store";
 import { resolveBaseUrl } from "@/lib/base-url";
 import { Shell, Notice } from "@/components/ui";
-import { QrImg } from "@/components/admin/QrImg";
+import { HomeQrCycler, type QrEntry } from "@/components/HomeQrCycler";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [settings, baseUrl] = await Promise.all([
+  const [settings, baseUrl, bonusVoters] = await Promise.all([
     getSettings(),
     resolveBaseUrl(),
+    listBonusVoters(),
   ]);
-  const voteUrl = `${baseUrl}/vote`;
+
+  // QR 循環：一般同仁 →（各）加分同仁 → 回一般同仁
+  const entries: QrEntry[] = [
+    {
+      label: "一般同仁投票",
+      hint: "每人 2 票，投給不同的兩支 Vlog",
+      url: `${baseUrl}/vote`,
+    },
+    ...bonusVoters.map((b) => ({
+      label: `${b.name}（${b.budget} 票）`,
+      hint: `${b.name} 專屬：把 ${b.budget} 票分給各作品`,
+      url: `${baseUrl}/bonus/${b.token}`,
+    })),
+  ];
 
   return (
     <Shell title={config.eventName} subtitle={config.tagline}>
       <div className="space-y-6">
         {settings.votingOpen ? (
-          <div className="flex flex-col items-center gap-4 rounded-2xl border-2 border-brand/30 bg-brand/5 p-6 text-center">
-            <p className="text-lg font-semibold">📱 掃描 QR code 開始投票</p>
-            <div className="rounded-xl bg-white p-3">
-              <QrImg url={voteUrl} size={220} />
-            </div>
-            <Link
-              href="/vote"
-              className="w-full max-w-xs rounded-xl bg-brand px-4 py-3 font-semibold text-white transition hover:bg-brand-dark"
-            >
-              點我開始投票 →
-            </Link>
-            <p className="text-xs text-neutral-500">
-              每人 2 票，投給不同的兩支 Vlog
-            </p>
-          </div>
+          <HomeQrCycler entries={entries} />
         ) : (
           <Notice tone="warn" title="投票尚未開放">
             投票時間尚未開始或已結束，敬請留意主辦單位公告。
