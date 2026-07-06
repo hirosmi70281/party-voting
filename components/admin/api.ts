@@ -12,6 +12,7 @@ export interface DashboardData {
   voterTokens: VoterToken[];
   judgeTokens: JudgeToken[];
   bonusVoters: BonusVoter[];
+  judgeShareToken: string;
   settings: Settings;
   standings: Standings;
   baseUrl: string;

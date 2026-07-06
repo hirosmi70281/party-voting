@@ -249,6 +249,19 @@ export async function getJudgeToken(token: string): Promise<JudgeToken | null> {
   return kv.hGetJSON<JudgeToken>(K_JUDGES, token);
 }
 
+const K_JUDGE_SHARE = "judge_share_token";
+
+/** 神秘客共用評分連結的密鑰（不好猜）；首次呼叫時產生並保存。 */
+export async function getJudgeShareToken(): Promise<string> {
+  const kv = await getKv();
+  let t = await kv.getJSON<string>(K_JUDGE_SHARE);
+  if (!t) {
+    t = nanoid(12);
+    await kv.setJSON(K_JUDGE_SHARE, t);
+  }
+  return t;
+}
+
 /** 刪除一位神秘客（連同其評分，計分時自然不再計入）。 */
 export async function deleteJudgeToken(token: string): Promise<ActionResult> {
   const kv = await getKv();

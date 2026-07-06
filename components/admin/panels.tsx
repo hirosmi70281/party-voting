@@ -420,6 +420,8 @@ export function JudgesPanel({
     }
   }
 
+  const shareUrl = `${data.baseUrl}/judge/${data.judgeShareToken}`;
+
   return (
     <div className="space-y-5">
       <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
@@ -436,6 +438,24 @@ export function JudgesPanel({
           </Btn>
         </div>
       </div>
+
+      {data.judgeTokens.length > 0 && (
+        <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 p-4">
+          <p className="font-semibold">神秘客共用評分連結（發這一條給兩位）</p>
+          <p className="mt-1 text-xs text-neutral-500">
+            兩位神秘客用同一條連結，打開後各自選「我是哪位」再評分。此連結含密鑰、
+            <b>只發給神秘客、別放首頁</b>。
+          </p>
+          <div className="mt-3 flex items-center gap-4">
+            <div className="rounded-lg bg-white p-2">
+              <QrImg url={shareUrl} size={100} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <CopyLink url={shareUrl} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {data.judgeTokens.map((j) => (
         <JudgeCard key={j.token} judge={j} data={data} reload={reload} />
