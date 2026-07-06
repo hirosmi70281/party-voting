@@ -1,7 +1,6 @@
 import type {
   Team,
   VoterToken,
-  JudgeToken,
   BonusVoter,
   Settings,
   Standings,
@@ -10,9 +9,10 @@ import type {
 export interface DashboardData {
   teams: Team[];
   voterTokens: VoterToken[];
-  judgeTokens: JudgeToken[];
   bonusVoters: BonusVoter[];
   judgeShareToken: string;
+  judgeSubmissionCount: number;
+  judgeCount: number;
   settings: Settings;
   standings: Standings;
   baseUrl: string;
@@ -78,15 +78,6 @@ export const adminApi = {
       }),
     );
   },
-  async createJudge(name: string) {
-    return parse(
-      await fetch("/api/admin/tokens", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "judge", name }),
-      }),
-    );
-  },
   async deleteVoterToken(token: string) {
     return parse(
       await fetch("/api/admin/tokens", {
@@ -105,25 +96,18 @@ export const adminApi = {
       }),
     );
   },
-  async deleteJudge(token: string) {
-    return parse(
-      await fetch("/api/admin/tokens", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "judge", token }),
-      }),
-    );
-  },
-  async setJudgeScores(
-    token: string,
-    scores: Record<string, Record<string, number>>,
-  ) {
+  async addJudgeSubmission(scores: Record<string, Record<string, number>>) {
     return parse(
       await fetch("/api/admin/judge-scores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, scores }),
+        body: JSON.stringify({ scores }),
       }),
+    );
+  },
+  async clearJudgeSubmissions() {
+    return parse(
+      await fetch("/api/admin/judge-scores", { method: "DELETE" }),
     );
   },
   async setSettings(patch: Partial<Settings>) {

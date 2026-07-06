@@ -6,7 +6,7 @@ import { isValidDriveUrl } from "./drive";
 import type {
   Team,
   VoterToken,
-  JudgeToken,
+  JudgeSubmission,
   BonusVoter,
   Settings,
   Standings,
@@ -17,7 +17,6 @@ const K_TEAMS = "teams"; // hash: teamId -> JSON(Team)
 const K_VOTERS = "voters"; // hash: token  -> JSON(VoterToken)
 const K_VOTER_USED = "voter_used"; // hash: token -> ts（原子 dedup）
 const K_VOTES = "votes"; // hash: teamId -> 票數
-const K_JUDGES = "judges"; // hash: token  -> JSON(JudgeToken)
 const K_BONUS = "bonus"; // hash: id -> JSON(BonusVoter)
 const K_SETTINGS = "settings"; // JSON(Settings)
 
@@ -224,32 +223,9 @@ export async function castSharedVote(
   return ok(undefined);
 }
 
-// ── Judge tokens ──────────────────────────────────────────
-export async function createJudgeToken(name: string): Promise<JudgeToken> {
-  const kv = await getKv();
-  const t: JudgeToken = {
-    token: nanoid(12),
-    name: name.trim() || `神秘客 ${(await listJudgeTokens()).length + 1}`,
-    createdAt: Date.now(),
-    submittedAt: null,
-    scores: {},
-  };
-  await kv.hSetJSON(K_JUDGES, t.token, t);
-  return t;
-}
-
-export async function listJudgeTokens(): Promise<JudgeToken[]> {
-  const kv = await getKv();
-  const all = await kv.hGetAllJSON<JudgeToken>(K_JUDGES);
-  return Object.values(all).sort((a, b) => a.createdAt - b.createdAt);
-}
-
-export async function getJudgeToken(token: string): Promise<JudgeToken | null> {
-  const kv = await getKv();
-  return kv.hGetJSON<JudgeToken>(K_JUDGES, token);
-}
-
+// ── Judge（神秘客：不記名共用評分）──────────────────────────
 const K_JUDGE_SHARE = "judge_share_token";
+const K_JUDGE_SUBS = "judge_subs"; // JSON array of JudgeSubmission
 
 /** 神秘客共用評分連結的密鑰（不好猜）；首次呼叫時產生並保存。 */
 export async function getJudgeShareToken(): Promise<string> {
@@ -260,15 +236,6 @@ export async function getJudgeShareToken(): Promise<string> {
     await kv.setJSON(K_JUDGE_SHARE, t);
   }
   return t;
-}
-
-/** 刪除一位神秘客（連同其評分，計分時自然不再計入）。 */
-export async function deleteJudgeToken(token: string): Promise<ActionResult> {
-  const kv = await getKv();
-  const judge = await getJudgeToken(token);
-  if (!judge) return fail("找不到該神秘客", 404);
-  await kv.hDel(K_JUDGES, token);
-  return ok(undefined);
 }
 
 function validateScores(
@@ -287,19 +254,33 @@ function validateScores(
   return null;
 }
 
-/** 神秘客送出評分（或 admin 代輸入）。允許重送覆蓋。 */
-export async function submitJudgeScores(
-  token: string,
-  scores: Record<string, Record<JudgeCriterionKey, number>>,
-): Promise<ActionResult> {
+export async function listJudgeSubmissions(): Promise<JudgeSubmission[]> {
   const kv = await getKv();
-  const judge = await getJudgeToken(token);
-  if (!judge) return fail("評分連結無效", 404);
+  return (await kv.getJSON<JudgeSubmission[]>(K_JUDGE_SUBS)) ?? [];
+}
+
+/**
+ * 新增一份神秘客評分（不記名）。最多收 config.judgeCount 份，額滿擋下。
+ */
+export async function addJudgeSubmission(
+  scores: Record<string, Record<JudgeCriterionKey, number>>,
+  source: "link" | "admin" = "link",
+): Promise<ActionResult<{ count: number }>> {
   const err = validateScores(scores);
   if (err) return fail(err, 400);
-  const updated: JudgeToken = { ...judge, scores, submittedAt: Date.now() };
-  await kv.hSetJSON(K_JUDGES, token, updated);
-  return ok(undefined);
+  const kv = await getKv();
+  const subs = await listJudgeSubmissions();
+  if (subs.length >= config.judgeCount)
+    return fail(`神秘客評分已額滿（${config.judgeCount} 位）`, 403);
+  subs.push({ scores, createdAt: Date.now(), source });
+  await kv.setJSON(K_JUDGE_SUBS, subs);
+  return ok({ count: subs.length });
+}
+
+/** 清除所有神秘客評分（重來）。 */
+export async function clearJudgeSubmissions(): Promise<void> {
+  const kv = await getKv();
+  await kv.del(K_JUDGE_SUBS);
 }
 
 // ── Settings ──────────────────────────────────────────────
@@ -390,12 +371,12 @@ export async function bonusVotesByTeam(): Promise<Record<string, number>> {
 }
 
 // ── Results ───────────────────────────────────────────────
-/** 由所有神秘客紀錄彙總每隊原始總分（上限 JUDGE_MAX_TOTAL）。 */
+/** 由所有神秘客評分彙總每隊原始總分（上限 JUDGE_MAX_TOTAL）。 */
 export async function judgeTotalsByTeam(): Promise<Record<string, number>> {
-  const judges = await listJudgeTokens();
+  const subs = await listJudgeSubmissions();
   const totals: Record<string, number> = {};
-  for (const j of judges) {
-    for (const [teamId, crit] of Object.entries(j.scores)) {
+  for (const s of subs) {
+    for (const [teamId, crit] of Object.entries(s.scores)) {
       const sum = config.judgeCriteria.reduce(
         (acc, c) => acc + (crit[c.key] ?? 0),
         0,

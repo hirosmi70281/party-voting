@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin";
 import { resolveBaseUrl } from "@/lib/base-url";
+import { config } from "@/lib/config";
 import {
   listTeams,
   listVoterTokens,
-  listJudgeTokens,
+  listJudgeSubmissions,
   listBonusVoters,
   getJudgeShareToken,
   getSettings,
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   const [
     teams,
     voterTokens,
-    judgeTokens,
+    judgeSubmissions,
     bonusVoters,
     judgeShareToken,
     settings,
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
   ] = await Promise.all([
     listTeams(),
     listVoterTokens(),
-    listJudgeTokens(),
+    listJudgeSubmissions(),
     listBonusVoters(),
     getJudgeShareToken(),
     getSettings(),
@@ -42,9 +43,10 @@ export async function GET(req: Request) {
   return NextResponse.json({
     teams,
     voterTokens,
-    judgeTokens,
     bonusVoters,
     judgeShareToken,
+    judgeSubmissionCount: judgeSubmissions.length,
+    judgeCount: config.judgeCount,
     settings,
     standings,
     baseUrl,
@@ -52,8 +54,8 @@ export async function GET(req: Request) {
       teamCount: teams.length,
       voterTotal: voterTokens.length,
       voterUsed: usedCount,
-      judgeCount: judgeTokens.length,
-      judgeSubmitted: judgeTokens.filter((j) => j.submittedAt).length,
+      judgeCount: config.judgeCount,
+      judgeSubmitted: judgeSubmissions.length,
     },
   });
 }

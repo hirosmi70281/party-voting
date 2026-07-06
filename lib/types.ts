@@ -19,14 +19,11 @@ export interface VoterToken {
   votes: string[]; // 投給的 team id（長度應為 2，且互異）
 }
 
-/** 神秘客評分憑證 */
-export interface JudgeToken {
-  token: string;
-  name: string; // 神秘客名稱，例：神秘客 A
+/** 神秘客評分（不記名）：一份提交 = 一位神秘客的評分。 */
+export interface JudgeSubmission {
+  scores: Record<string, Record<JudgeCriterionKey, number>>; // teamId -> 各項分數
   createdAt: number;
-  submittedAt: number | null;
-  // teamId -> { 各項目分數 }
-  scores: Record<string, Record<JudgeCriterionKey, number>>;
+  source: "link" | "admin"; // 由共用連結送出，或管理者代輸入
 }
 
 /** 加分同仁（加權投票者）：有固定票數額度，可分散投給各隊，併入公開投票。 */

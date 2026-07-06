@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { config, JUDGE_MAX_PER_JUDGE, type JudgeCriterionKey } from "@/lib/config";
-import type { Team, JudgeToken, BonusVoter } from "@/lib/types";
+import type { Team, BonusVoter } from "@/lib/types";
 import { Notice } from "@/components/ui";
 import { StandingsTable } from "@/components/StandingsTable";
 import { QrImg, CopyLink } from "./QrImg";
 import { adminApi, type DashboardData } from "./api";
 
 const voteUrl = (base: string, token: string) => `${base}/vote/${token}`;
-const judgeUrl = (base: string, token: string) => `${base}/judge/${token}`;
 
 function Btn({
   children,
@@ -398,7 +397,7 @@ export function VotersPanel({
   );
 }
 
-// ── 神秘客 ────────────────────────────────────────────────
+// ── 神秘客（不記名共用評分）────────────────────────────────
 export function JudgesPanel({
   data,
   reload,
@@ -406,116 +405,70 @@ export function JudgesPanel({
   data: DashboardData;
   reload: () => Promise<void>;
 }) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function add() {
-    setBusy(true);
-    try {
-      await adminApi.createJudge(name);
-      setName("");
-      await reload();
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const [showManual, setShowManual] = useState(false);
   const shareUrl = `${data.baseUrl}/judge/${data.judgeShareToken}`;
+  const received = data.judgeSubmissionCount;
+  const total = data.judgeCount;
+  const full = received >= total;
 
   return (
     <div className="space-y-5">
-      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-        <p className="font-semibold">新增神秘客（建議 {config.judgeCount} 位）</p>
-        <div className="flex gap-2">
-          <input
-            className="input flex-1"
-            placeholder="名稱，例：神秘客 A"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Btn onClick={add} disabled={busy}>
-            新增
-          </Btn>
+      <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 p-4">
+        <p className="font-semibold">神秘客共用評分連結（發這一條給兩位）</p>
+        <p className="mt-1 text-xs text-neutral-500">
+          {total} 位神秘客用同一條連結、不記名，各自打開評分送出即可（最多收 {total}{" "}
+          份，滿了自動關閉）。此連結含密鑰、<b>只發給神秘客、別放首頁</b>。
+        </p>
+        <div className="mt-3 flex items-center gap-4">
+          <div className="rounded-lg bg-white p-2">
+            <QrImg url={shareUrl} size={110} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CopyLink url={shareUrl} />
+          </div>
         </div>
       </div>
 
-      {data.judgeTokens.length > 0 && (
-        <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 p-4">
-          <p className="font-semibold">神秘客共用評分連結（發這一條給兩位）</p>
-          <p className="mt-1 text-xs text-neutral-500">
-            兩位神秘客用同一條連結，打開後各自選「我是哪位」再評分。此連結含密鑰、
-            <b>只發給神秘客、別放首頁</b>。
-          </p>
-          <div className="mt-3 flex items-center gap-4">
-            <div className="rounded-lg bg-white p-2">
-              <QrImg url={shareUrl} size={100} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <CopyLink url={shareUrl} />
-            </div>
-          </div>
-        </div>
-      )}
+      <Notice tone={full ? "success" : "info"}>
+        已收到 <b>{received} / {total}</b> 位神秘客的評分。
+        {full ? "（已額滿）" : ""}
+      </Notice>
 
-      {data.judgeTokens.map((j) => (
-        <JudgeCard key={j.token} judge={j} data={data} reload={reload} />
-      ))}
-    </div>
-  );
-}
-
-function JudgeCard({
-  judge,
-  data,
-  reload,
-}: {
-  judge: JudgeToken;
-  data: DashboardData;
-  reload: () => Promise<void>;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold">{judge.name}</p>
-          <p className="text-xs text-neutral-500">
-            {judge.submittedAt ? "● 已評分" : "○ 尚未評分"}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Btn tone="neutral" small onClick={() => setOpen((o) => !o)}>
-            {open ? "收合" : "代輸入分數"}
+      <div className="flex flex-wrap gap-2">
+        {!full && (
+          <Btn tone="neutral" small onClick={() => setShowManual((s) => !s)}>
+            {showManual ? "收合代輸入" : "管理者代輸入一份"}
           </Btn>
+        )}
+        {received > 0 && (
           <DeleteButton
+            tone="neutral"
+            label="清除重來"
+            confirmLabel="確定清除全部評分?"
             onDelete={async () => {
-              await adminApi.deleteJudge(judge.token);
+              await adminApi.clearJudgeSubmissions();
               await reload();
             }}
           />
-        </div>
+        )}
       </div>
 
-      <div className="mt-3 flex items-center gap-3">
-        <QrImg url={judgeUrl(data.baseUrl, judge.token)} size={72} />
-        <CopyLink url={judgeUrl(data.baseUrl, judge.token)} />
-      </div>
-
-      {open && (
-        <AdminScoreEditor judge={judge} teams={data.teams} reload={reload} />
+      {showManual && !full && (
+        <AdminScoreEditor teams={data.teams} reload={reload} onDone={() => setShowManual(false)} />
       )}
     </div>
   );
 }
 
+// 管理者代輸入一份神秘客評分（不記名，新增一份 submission）
 function AdminScoreEditor({
-  judge,
   teams,
   reload,
+  onDone,
 }: {
-  judge: JudgeToken;
   teams: Team[];
   reload: () => Promise<void>;
+  onDone: () => void;
 }) {
   const max = config.judgeMaxPerCriterion;
   const [scores, setScores] = useState<
@@ -524,7 +477,7 @@ function AdminScoreEditor({
     const s: Record<string, Record<JudgeCriterionKey, number>> = {};
     for (const t of teams) {
       s[t.id] = Object.fromEntries(
-        config.judgeCriteria.map((c) => [c.key, judge.scores[t.id]?.[c.key] ?? 0]),
+        config.judgeCriteria.map((c) => [c.key, 0]),
       ) as Record<JudgeCriterionKey, number>;
     }
     return s;
@@ -536,9 +489,9 @@ function AdminScoreEditor({
     setBusy(true);
     setMsg(null);
     try {
-      await adminApi.setJudgeScores(judge.token, scores);
-      setMsg("已儲存");
+      await adminApi.addJudgeSubmission(scores);
       await reload();
+      onDone();
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
@@ -547,7 +500,8 @@ function AdminScoreEditor({
   }
 
   return (
-    <div className="mt-4 space-y-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+    <div className="space-y-4 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <p className="text-sm font-medium">代輸入一位神秘客的評分</p>
       {teams.map((t) => (
         <div key={t.id}>
           <p className="mb-1 text-sm font-medium">《{t.title}》</p>
@@ -580,9 +534,9 @@ function AdminScoreEditor({
           </p>
         </div>
       ))}
-      {msg && <Notice tone="info">{msg}</Notice>}
+      {msg && <Notice tone="error">{msg}</Notice>}
       <Btn onClick={save} disabled={busy}>
-        {busy ? "儲存中…" : "儲存這位神秘客的分數"}
+        {busy ? "送出中…" : "送出這份評分"}
       </Btn>
     </div>
   );

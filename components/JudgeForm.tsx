@@ -13,21 +13,11 @@ function blankCriteria(): Record<JudgeCriterionKey, number> {
   ) as Record<JudgeCriterionKey, number>;
 }
 
-export function JudgeForm({
-  token,
-  judgeName,
-  teams,
-  initial,
-}: {
-  token: string;
-  judgeName: string;
-  teams: Team[];
-  initial: Scores;
-}) {
+export function JudgeForm({ token, teams }: { token: string; teams: Team[] }) {
   const max = config.judgeMaxPerCriterion;
   const [scores, setScores] = useState<Scores>(() => {
     const s: Scores = {};
-    for (const t of teams) s[t.id] = { ...blankCriteria(), ...(initial[t.id] ?? {}) };
+    for (const t of teams) s[t.id] = blankCriteria();
     return s;
   });
   const [submitting, setSubmitting] = useState(false);
@@ -70,7 +60,7 @@ export function JudgeForm({
   if (done) {
     return (
       <Notice tone="success" title="評分已送出 ⭐">
-        感謝 {judgeName} 的評分！如需修改，重新整理本頁即可再次調整送出。
+        感謝你的評分！評分已送出。
       </Notice>
     );
   }

@@ -95,27 +95,27 @@ for tok, pick in zip(tokens[1:], dist):
     st, d = req("POST", "/api/vote", {"token": tok, "teamIds": pick})
     check(f"投票 {tok[:6]}", st == 200, f"(got {st}: {d.get('error')})")
 
-# 13. 建 2 神秘客並代輸入分數
-judge_tokens = []
-for nm in ["神秘客 A", "神秘客 B"]:
-    st, d = req("POST", "/api/admin/tokens", {"kind":"judge","name":nm})
-    judge_tokens.append(d["judge"]["token"])
-check("建立 2 位神秘客", len(judge_tokens) == 2)
-
+# 13. 神秘客不記名：代輸入 2 份評分
 def scores_for(v): return {"creativity":v,"shooting":v,"editing":v,"story":v,"impact":v}
-# 神秘客 A：team0 各項10(=50), team1 各8(=40), team2 各6(=30)
-st, d = req("POST", "/api/admin/judge-scores", {"token": judge_tokens[0],
-    "scores": {tids[0]:scores_for(10), tids[1]:scores_for(8), tids[2]:scores_for(6)}})
-check("神秘客A代輸入", st == 200, f"(got {st}: {d.get('error')})")
-# 神秘客 B：team0 各9(=45), team1 各7(=35), team2 各5(=25)
-st, d = req("POST", "/api/admin/judge-scores", {"token": judge_tokens[1],
-    "scores": {tids[0]:scores_for(9), tids[1]:scores_for(7), tids[2]:scores_for(5)}})
-check("神秘客B代輸入", st == 200, f"(got {st}: {d.get('error')})")
+# 第1份：team0 各項10(=50), team1 各8(=40), team2 各6(=30)
+st, d = req("POST", "/api/admin/judge-scores",
+    {"scores": {tids[0]:scores_for(10), tids[1]:scores_for(8), tids[2]:scores_for(6)}})
+check("神秘客第1份代輸入", st == 200, f"(got {st}: {d.get('error')})")
+# 第2份：team0 各9(=45), team1 各7(=35), team2 各5(=25)
+st, d = req("POST", "/api/admin/judge-scores",
+    {"scores": {tids[0]:scores_for(9), tids[1]:scores_for(7), tids[2]:scores_for(5)}})
+check("神秘客第2份代輸入", st == 200, f"(got {st}: {d.get('error')})")
 
-# 超範圍分數 → 400
-st, d = req("POST", "/api/admin/judge-scores", {"token": judge_tokens[0],
-    "scores": {tids[0]: {"creativity":99,"shooting":0,"editing":0,"story":0,"impact":0}}})
+# 超範圍分數 → 400（清除後重試一份，避免額滿干擾）
+req("DELETE", "/api/admin/judge-scores")
+st, d = req("POST", "/api/admin/judge-scores",
+    {"scores": {tids[0]: {"creativity":99,"shooting":0,"editing":0,"story":0,"impact":0}}})
 check("神秘客分數超範圍回 400", st == 400, f"(got {st}: {d.get('error')})")
+# 重新補回兩份正確評分
+req("POST", "/api/admin/judge-scores",
+    {"scores": {tids[0]:scores_for(10), tids[1]:scores_for(8), tids[2]:scores_for(6)}})
+req("POST", "/api/admin/judge-scores",
+    {"scores": {tids[0]:scores_for(9), tids[1]:scores_for(7), tids[2]:scores_for(5)}})
 
 # 14. 取最終 standings 驗算
 st, data = req("GET", "/api/admin/data")
