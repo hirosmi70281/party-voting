@@ -1,0 +1,561 @@
+"use client";
+
+import { useState } from "react";
+import { config, JUDGE_MAX_PER_JUDGE, type JudgeCriterionKey } from "@/lib/config";
+import type { Team, JudgeToken } from "@/lib/types";
+import { Notice } from "@/components/ui";
+import { StandingsTable } from "@/components/StandingsTable";
+import { QrImg, CopyLink } from "./QrImg";
+import { adminApi, type DashboardData } from "./api";
+
+const voteUrl = (base: string, token: string) => `${base}/vote/${token}`;
+const judgeUrl = (base: string, token: string) => `${base}/judge/${token}`;
+
+function Btn({
+  children,
+  onClick,
+  tone = "brand",
+  disabled,
+  small,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  tone?: "brand" | "neutral" | "danger";
+  disabled?: boolean;
+  small?: boolean;
+}) {
+  const tones = {
+    brand: "bg-brand text-white enabled:hover:bg-brand-dark",
+    neutral:
+      "bg-neutral-200 text-neutral-800 enabled:hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-100",
+    danger: "bg-red-600 text-white enabled:hover:bg-red-700",
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-lg font-medium transition disabled:opacity-40 ${
+        small ? "px-2.5 py-1 text-xs" : "px-4 py-2 text-sm"
+      } ${tones[tone]}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DeleteButton({ onDelete }: { onDelete: () => void }) {
+  const [armed, setArmed] = useState(false);
+  return (
+    <Btn tone="danger" small onClick={() => (armed ? onDelete() : setArmed(true))}>
+      {armed ? "確定刪除?" : "刪除"}
+    </Btn>
+  );
+}
+
+// ── 總覽 ──────────────────────────────────────────────────
+export function OverviewPanel({ data }: { data: DashboardData }) {
+  const s = data.stats;
+  const cards = [
+    { label: "參賽隊伍", value: s.teamCount },
+    { label: "投票券已用 / 總數", value: `${s.voterUsed} / ${s.voterTotal}` },
+    { label: "神秘客已評 / 總數", value: `${s.judgeSubmitted} / ${s.judgeCount}` },
+    { label: "有效票數", value: data.standings.totalValidVotes },
+  ];
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {cards.map((c) => (
+          <div
+            key={c.label}
+            className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800"
+          >
+            <p className="text-xs text-neutral-500">{c.label}</p>
+            <p className="mt-1 text-2xl font-bold">{c.value}</p>
+          </div>
+        ))}
+      </div>
+      <Notice tone={data.settings.votingOpen ? "success" : "warn"}>
+        投票狀態：<b>{data.settings.votingOpen ? "開放中" : "未開放"}</b>
+        {" ｜ "}
+        結果頁：<b>{data.settings.resultsPublic ? "已公開" : "未公開"}</b>
+        （可到「設定」分頁切換）
+      </Notice>
+    </div>
+  );
+}
+
+// ── 隊伍 ──────────────────────────────────────────────────
+export function TeamsPanel({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminApi.createTeam({ name, title, videoUrl });
+      setName("");
+      setTitle("");
+      setVideoUrl("");
+      await reload();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <p className="font-semibold">新增隊伍</p>
+        <input
+          className="input"
+          placeholder="隊名，例：白富美小隊"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="input"
+          placeholder="作品名，例：最爆走的廈門行軍"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <input
+          className="input"
+          placeholder="Google Drive 影片分享連結"
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+        />
+        {err && <Notice tone="error">{err}</Notice>}
+        <Btn onClick={add} disabled={busy}>
+          {busy ? "新增中…" : "新增隊伍"}
+        </Btn>
+      </div>
+
+      <div className="space-y-3">
+        {data.teams.length === 0 && (
+          <Notice tone="info">尚無隊伍，請先於上方新增。</Notice>
+        )}
+        {data.teams.map((team) => (
+          <TeamRow key={team.id} team={team} reload={reload} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamRow({ team, reload }: { team: Team; reload: () => Promise<void> }) {
+  const [edit, setEdit] = useState(false);
+  const [name, setName] = useState(team.name);
+  const [title, setTitle] = useState(team.title);
+  const [videoUrl, setVideoUrl] = useState(team.videoUrl);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setErr(null);
+    try {
+      await adminApi.updateTeam(team.id, { name, title, videoUrl });
+      setEdit(false);
+      await reload();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      {edit ? (
+        <div className="space-y-2">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            className="input"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="Google Drive 連結"
+          />
+          {err && <Notice tone="error">{err}</Notice>}
+          <div className="flex gap-2">
+            <Btn onClick={save} small>
+              儲存
+            </Btn>
+            <Btn tone="neutral" small onClick={() => setEdit(false)}>
+              取消
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-semibold">《{team.title}》</p>
+            <p className="text-sm text-neutral-500">{team.name}</p>
+            <p className="mt-1 truncate text-xs text-neutral-400">
+              {team.videoUrl || "（未填影片連結）"}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Btn tone="neutral" small onClick={() => setEdit(true)}>
+              編輯
+            </Btn>
+            <DeleteButton
+              onDelete={async () => {
+                await adminApi.deleteTeam(team.id);
+                await reload();
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 投票券 ────────────────────────────────────────────────
+export function VotersPanel({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [count, setCount] = useState(10);
+  const [prefix, setPrefix] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function gen() {
+    setBusy(true);
+    try {
+      await adminApi.createVoterTokens(count, prefix || undefined);
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function exportCsv() {
+    const rows = [
+      ["備註", "投票連結", "狀態"],
+      ...data.voterTokens.map((t) => [
+        t.label,
+        voteUrl(data.baseUrl, t.token),
+        t.usedAt ? "已投票" : "未使用",
+      ]),
+    ];
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "voter-links.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <p className="font-semibold">批次產生投票券</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm">張數</label>
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            className="input w-24"
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+          />
+          <input
+            className="input flex-1"
+            placeholder="備註前綴（選填），例：行政部"
+            value={prefix}
+            onChange={(e) => setPrefix(e.target.value)}
+          />
+          <Btn onClick={gen} disabled={busy}>
+            {busy ? "產生中…" : "產生"}
+          </Btn>
+        </div>
+        <p className="text-xs text-neutral-500">
+          每張連結只能投一次。產生後把連結／QR 發給同仁即可。
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-neutral-500">
+          共 {data.voterTokens.length} 張，已投{" "}
+          {data.voterTokens.filter((t) => t.usedAt).length} 張
+        </p>
+        {data.voterTokens.length > 0 && (
+          <Btn tone="neutral" small onClick={exportCsv}>
+            匯出 CSV
+          </Btn>
+        )}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {data.voterTokens.map((t) => (
+          <div
+            key={t.token}
+            className="flex items-center gap-3 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800"
+          >
+            <QrImg url={voteUrl(data.baseUrl, t.token)} size={72} />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="flex items-center gap-2 text-xs">
+                {t.label || "（無備註）"}
+                <span
+                  className={
+                    t.usedAt ? "text-green-600" : "text-neutral-400"
+                  }
+                >
+                  {t.usedAt ? "● 已投票" : "○ 未使用"}
+                </span>
+              </span>
+              <CopyLink url={voteUrl(data.baseUrl, t.token)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── 神秘客 ────────────────────────────────────────────────
+export function JudgesPanel({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    setBusy(true);
+    try {
+      await adminApi.createJudge(name);
+      setName("");
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <p className="font-semibold">新增神秘客（建議 {config.judgeCount} 位）</p>
+        <div className="flex gap-2">
+          <input
+            className="input flex-1"
+            placeholder="名稱，例：神秘客 A"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Btn onClick={add} disabled={busy}>
+            新增
+          </Btn>
+        </div>
+      </div>
+
+      {data.judgeTokens.map((j) => (
+        <JudgeCard key={j.token} judge={j} data={data} reload={reload} />
+      ))}
+    </div>
+  );
+}
+
+function JudgeCard({
+  judge,
+  data,
+  reload,
+}: {
+  judge: JudgeToken;
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold">{judge.name}</p>
+          <p className="text-xs text-neutral-500">
+            {judge.submittedAt ? "● 已評分" : "○ 尚未評分"}
+          </p>
+        </div>
+        <Btn tone="neutral" small onClick={() => setOpen((o) => !o)}>
+          {open ? "收合" : "代輸入分數"}
+        </Btn>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <QrImg url={judgeUrl(data.baseUrl, judge.token)} size={72} />
+        <CopyLink url={judgeUrl(data.baseUrl, judge.token)} />
+      </div>
+
+      {open && (
+        <AdminScoreEditor judge={judge} teams={data.teams} reload={reload} />
+      )}
+    </div>
+  );
+}
+
+function AdminScoreEditor({
+  judge,
+  teams,
+  reload,
+}: {
+  judge: JudgeToken;
+  teams: Team[];
+  reload: () => Promise<void>;
+}) {
+  const max = config.judgeMaxPerCriterion;
+  const [scores, setScores] = useState<
+    Record<string, Record<JudgeCriterionKey, number>>
+  >(() => {
+    const s: Record<string, Record<JudgeCriterionKey, number>> = {};
+    for (const t of teams) {
+      s[t.id] = Object.fromEntries(
+        config.judgeCriteria.map((c) => [c.key, judge.scores[t.id]?.[c.key] ?? 0]),
+      ) as Record<JudgeCriterionKey, number>;
+    }
+    return s;
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminApi.setJudgeScores(judge.token, scores);
+      setMsg("已儲存");
+      await reload();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+      {teams.map((t) => (
+        <div key={t.id}>
+          <p className="mb-1 text-sm font-medium">《{t.title}》</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {config.judgeCriteria.map((c) => (
+              <label key={c.key} className="flex flex-col text-xs">
+                <span className="text-neutral-500">{c.label}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={max}
+                  className="input"
+                  value={scores[t.id][c.key]}
+                  onChange={(e) =>
+                    setScores((cur) => ({
+                      ...cur,
+                      [t.id]: {
+                        ...cur[t.id],
+                        [c.key]: Math.max(0, Math.min(max, Number(e.target.value))),
+                      },
+                    }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-right text-xs text-neutral-500">
+            小計 {config.judgeCriteria.reduce((a, c) => a + scores[t.id][c.key], 0)} /{" "}
+            {JUDGE_MAX_PER_JUDGE}
+          </p>
+        </div>
+      ))}
+      {msg && <Notice tone="info">{msg}</Notice>}
+      <Btn onClick={save} disabled={busy}>
+        {busy ? "儲存中…" : "儲存這位神秘客的分數"}
+      </Btn>
+    </div>
+  );
+}
+
+// ── 設定 ──────────────────────────────────────────────────
+export function SettingsPanel({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  async function toggle(patch: { votingOpen?: boolean; resultsPublic?: boolean }) {
+    await adminApi.setSettings(patch);
+    await reload();
+  }
+  return (
+    <div className="space-y-3">
+      <ToggleRow
+        label="開放公開投票"
+        desc="開啟後，持有效投票券的同仁才能投票。"
+        on={data.settings.votingOpen}
+        onToggle={(v) => toggle({ votingOpen: v })}
+      />
+      <ToggleRow
+        label="公開結果頁 /results"
+        desc="開啟後，任何人都能看到即時排行榜。通常等頒獎時再開。"
+        on={data.settings.resultsPublic}
+        onToggle={(v) => toggle({ resultsPublic: v })}
+      />
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  desc,
+  on,
+  onToggle,
+}: {
+  label: string;
+  desc: string;
+  on: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+      <div>
+        <p className="font-medium">{label}</p>
+        <p className="text-xs text-neutral-500">{desc}</p>
+      </div>
+      <button
+        onClick={() => onToggle(!on)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+          on ? "bg-brand" : "bg-neutral-300 dark:bg-neutral-600"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
+            on ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+// ── 結果 ──────────────────────────────────────────────────
+export function ResultsPanel({ data }: { data: DashboardData }) {
+  return <StandingsTable standings={data.standings} />;
+}
