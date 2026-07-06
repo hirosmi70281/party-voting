@@ -29,6 +29,7 @@ export interface JudgeSubmission {
 /** 加分同仁（加權投票者）：有固定票數額度，可分散投給各隊，併入公開投票。 */
 export interface BonusVoter {
   id: string;
+  token: string; // 專屬投票連結/QR 用的不可猜密鑰
   name: string; // 例：TOP1
   budget: number; // 可投票數上限，例：8
   allocations: Record<string, number>; // teamId -> 分配票數

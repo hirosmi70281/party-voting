@@ -683,7 +683,13 @@ export function BonusPanel({
       )}
 
       {data.bonusVoters.map((bv) => (
-        <BonusCard key={bv.id} bonus={bv} teams={data.teams} reload={reload} />
+        <BonusCard
+          key={bv.id}
+          bonus={bv}
+          teams={data.teams}
+          baseUrl={data.baseUrl}
+          reload={reload}
+        />
       ))}
     </div>
   );
@@ -692,10 +698,12 @@ export function BonusPanel({
 function BonusCard({
   bonus,
   teams,
+  baseUrl,
   reload,
 }: {
   bonus: BonusVoter;
   teams: Team[];
+  baseUrl: string;
   reload: () => Promise<void>;
 }) {
   const [alloc, setAlloc] = useState<Record<string, number>>(() => {
@@ -742,7 +750,23 @@ function BonusCard({
         />
       </div>
 
-      <div className="mt-3 space-y-2">
+      {/* 專屬投票連結/QR：發給這位加分同仁自己分配 */}
+      <div className="mt-3 flex items-center gap-3 rounded-lg bg-brand/5 p-2">
+        <div className="rounded-lg bg-white p-1.5">
+          <QrImg url={`${baseUrl}/bonus/${bonus.token}`} size={72} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-xs text-neutral-500">
+            專屬連結（發給 {bonus.name} 自己分配票）
+          </p>
+          <CopyLink url={`${baseUrl}/bonus/${bonus.token}`} />
+        </div>
+      </div>
+
+      <p className="mt-4 text-xs font-medium text-neutral-500">
+        或由管理者代分配：
+      </p>
+      <div className="mt-1 space-y-2">
         {teams.map((t) => (
           <div key={t.id} className="flex items-center gap-3">
             <span className="min-w-0 flex-1 truncate text-sm">

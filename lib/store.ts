@@ -307,7 +307,23 @@ export async function setSettings(
 export async function listBonusVoters(): Promise<BonusVoter[]> {
   const kv = await getKv();
   const all = await kv.hGetAllJSON<BonusVoter>(K_BONUS);
-  return Object.values(all).sort((a, b) => a.createdAt - b.createdAt);
+  const voters = Object.values(all);
+  // 相容舊資料：沒有 token 的補一個並存回。
+  for (const bv of voters) {
+    if (!bv.token) {
+      bv.token = nanoid(12);
+      await kv.hSetJSON(K_BONUS, bv.id, bv);
+    }
+  }
+  return voters.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/** 依專屬 token 找加分同仁。 */
+export async function getBonusVoterByToken(
+  token: string,
+): Promise<BonusVoter | null> {
+  const voters = await listBonusVoters();
+  return voters.find((v) => v.token === token) ?? null;
 }
 
 export async function createBonusVoter(
@@ -321,6 +337,7 @@ export async function createBonusVoter(
   const kv = await getKv();
   const bv: BonusVoter = {
     id: nanoid(8),
+    token: nanoid(12),
     name: nm,
     budget: b,
     allocations: {},
@@ -328,6 +345,16 @@ export async function createBonusVoter(
   };
   await kv.hSetJSON(K_BONUS, bv.id, bv);
   return ok(bv);
+}
+
+/** 依 token 更新分配（加分同仁自助投票用）。 */
+export async function setBonusAllocationsByToken(
+  token: string,
+  allocations: Record<string, number>,
+): Promise<ActionResult<BonusVoter>> {
+  const bv = await getBonusVoterByToken(token);
+  if (!bv) return fail("投票連結無效", 404);
+  return setBonusAllocations(bv.id, allocations);
 }
 
 /** 更新某位加分同仁把票分配給哪些隊（總和不得超過其 budget）。 */
