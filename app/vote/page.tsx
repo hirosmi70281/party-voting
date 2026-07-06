@@ -25,7 +25,7 @@ export default async function SharedVotePage() {
     );
   }
 
-  if (store.get(BALLOT_COOKIE)) {
+  if (!settings.testMode && store.get(BALLOT_COOKIE)) {
     return (
       <Shell title={config.eventName}>
         <Notice tone="success" title="你已經投過票囉 🎉">

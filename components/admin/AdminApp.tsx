@@ -62,6 +62,12 @@ export function AdminApp() {
           <p className="text-xs text-neutral-500">{config.eventName}</p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/"
+            className="rounded-lg bg-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-300 dark:bg-neutral-700"
+          >
+            首頁
+          </a>
           <button
             onClick={reload}
             className="rounded-lg bg-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-300 dark:bg-neutral-700"

@@ -39,6 +39,7 @@ export interface BonusVoter {
 export interface Settings {
   votingOpen: boolean; // 公開投票是否開放
   resultsPublic: boolean; // /results 是否對外公開
+  testMode: boolean; // 測試模式：允許同一裝置重複投票（正式活動前務必關閉）
 }
 
 /** 單隊計分結果 */

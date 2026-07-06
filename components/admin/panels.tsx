@@ -89,6 +89,11 @@ export function OverviewPanel({ data }: { data: DashboardData }) {
         結果頁：<b>{data.settings.resultsPublic ? "已公開" : "未公開"}</b>
         （可到「設定」分頁切換）
       </Notice>
+      {data.settings.testMode && (
+        <Notice tone="error">
+          ⚠️ <b>測試模式開啟中</b>：同一支手機可重複投票。正式活動前請到「設定」關閉。
+        </Notice>
+      )}
     </div>
   );
 }
@@ -550,7 +555,11 @@ export function SettingsPanel({
   data: DashboardData;
   reload: () => Promise<void>;
 }) {
-  async function toggle(patch: { votingOpen?: boolean; resultsPublic?: boolean }) {
+  async function toggle(patch: {
+    votingOpen?: boolean;
+    resultsPublic?: boolean;
+    testMode?: boolean;
+  }) {
     await adminApi.setSettings(patch);
     await reload();
   }
@@ -558,7 +567,7 @@ export function SettingsPanel({
     <div className="space-y-3">
       <ToggleRow
         label="開放公開投票"
-        desc="開啟後，持有效投票券的同仁才能投票。"
+        desc="開啟後，同仁掃共用 QR 即可投票。"
         on={data.settings.votingOpen}
         onToggle={(v) => toggle({ votingOpen: v })}
       />
@@ -567,6 +576,12 @@ export function SettingsPanel({
         desc="開啟後，任何人都能看到即時排行榜。通常等頒獎時再開。"
         on={data.settings.resultsPublic}
         onToggle={(v) => toggle({ resultsPublic: v })}
+      />
+      <ToggleRow
+        label="測試模式（允許同一手機重複投票）"
+        desc="測試時開啟，同一支手機可重複掃碼投票。⚠️ 正式活動前務必關閉，否則防重複會失效。可隨時開關。"
+        on={data.settings.testMode}
+        onToggle={(v) => toggle({ testMode: v })}
       />
     </div>
   );

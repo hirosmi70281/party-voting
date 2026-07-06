@@ -20,7 +20,11 @@ const K_VOTES = "votes"; // hash: teamId -> 票數
 const K_BONUS = "bonus"; // hash: id -> JSON(BonusVoter)
 const K_SETTINGS = "settings"; // JSON(Settings)
 
-const DEFAULT_SETTINGS: Settings = { votingOpen: false, resultsPublic: false };
+const DEFAULT_SETTINGS: Settings = {
+  votingOpen: false,
+  resultsPublic: false,
+  testMode: false,
+};
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
