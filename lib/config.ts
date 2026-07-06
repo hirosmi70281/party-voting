@@ -26,6 +26,9 @@ export const config = {
 
 export type JudgeCriterionKey = (typeof config.judgeCriteria)[number]["key"];
 
+// 共用投票時，記錄「這台裝置投過了」的 cookie 名稱（軟性防重複）。
+export const BALLOT_COOKIE = "pv_ballot";
+
 // 每位神秘客每隊滿分 = 項目數 × 每項上限
 export const JUDGE_MAX_PER_JUDGE =
   config.judgeCriteria.length * config.judgeMaxPerCriterion;

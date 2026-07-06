@@ -5,7 +5,7 @@ import type { Team } from "@/lib/types";
 import { config } from "@/lib/config";
 import { DriveVideo, Notice } from "./ui";
 
-export function VoteForm({ token, teams }: { token: string; teams: Team[] }) {
+export function VoteForm({ token, teams }: { token?: string; teams: Team[] }) {
   const need = config.votesPerBallot;
   const [selected, setSelected] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);

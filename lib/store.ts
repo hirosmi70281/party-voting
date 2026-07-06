@@ -198,6 +198,32 @@ export async function castVote(
   return ok(undefined);
 }
 
+/**
+ * 共用連結投票（不記名、無 token）：只驗證規則並累加票數。
+ * 防同一裝置重複投票由呼叫端用 cookie 處理（軟性）。
+ */
+export async function castSharedVote(
+  teamIds: string[],
+): Promise<ActionResult> {
+  const kv = await getKv();
+  const settings = await getSettings();
+  if (!settings.votingOpen) return fail("投票尚未開放或已結束", 403);
+
+  const unique = [...new Set(teamIds)];
+  if (teamIds.length !== config.votesPerBallot)
+    return fail(`每人須投 ${config.votesPerBallot} 票`, 400);
+  if (unique.length !== config.votesPerBallot)
+    return fail("兩票必須投給不同作品", 400);
+
+  const teams = await listTeams();
+  const validIds = new Set(teams.map((t) => t.id));
+  if (!unique.every((id) => validIds.has(id)))
+    return fail("投票對象不存在", 400);
+
+  for (const id of unique) await kv.hIncrBy(K_VOTES, id, 1);
+  return ok(undefined);
+}
+
 // ── Judge tokens ──────────────────────────────────────────
 export async function createJudgeToken(name: string): Promise<JudgeToken> {
   const kv = await getKv();

@@ -272,10 +272,46 @@ export function VotersPanel({
     URL.revokeObjectURL(a.href);
   }
 
+  const sharedUrl = `${data.baseUrl}/vote`;
+
   return (
     <div className="space-y-5">
-      <div className="space-y-2 rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
-        <p className="font-semibold">批次產生投票券</p>
+      {/* 共用投票連結（主要方式）*/}
+      <div className="rounded-2xl border-2 border-brand/30 bg-brand/5 p-4">
+        <p className="font-semibold">共用投票連結（發這個給所有同仁）</p>
+        <p className="mt-1 text-xs text-neutral-500">
+          所有人掃同一個 QR／開同一條連結即可投票，不記名。此 QR 也會出現在
+          <b>首頁</b>——投票開放時把首頁投影出來，大家就能直接掃描。
+          同一台裝置只能投一次（軟性防重複）。
+        </p>
+        <div className="mt-3 flex items-center gap-4">
+          <div className="rounded-lg bg-white p-2">
+            <QrImg url={sharedUrl} size={120} />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <CopyLink url={sharedUrl} />
+            <a
+              href={sharedUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-brand underline"
+            >
+              開啟投票頁
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* 進階：一人一票券 */}
+      <details className="rounded-xl border border-neutral-200 p-4 dark:border-neutral-800">
+        <summary className="cursor-pointer text-sm font-medium text-neutral-600 dark:text-neutral-300">
+          進階：一人一票券（需要嚴格防重複時才用）
+        </summary>
+        <div className="mt-3 space-y-2">
+        <p className="text-xs text-neutral-500">
+          會為每個人產生獨立的一次性連結／QR，一張只能投一次、可追蹤使用狀況。
+          一般情況用上面的共用連結即可。
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm">張數</label>
           <input
@@ -299,9 +335,8 @@ export function VotersPanel({
         <p className="text-xs text-neutral-500">
           每張連結只能投一次。產生後把連結／QR 發給同仁即可。
         </p>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
           共 {data.voterTokens.length} 張，已投{" "}
           {data.voterTokens.filter((t) => t.usedAt).length} 張
@@ -356,7 +391,9 @@ export function VotersPanel({
             />
           </div>
         ))}
-      </div>
+        </div>
+        </div>
+      </details>
     </div>
   );
 }
