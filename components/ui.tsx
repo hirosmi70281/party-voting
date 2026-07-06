@@ -1,4 +1,5 @@
 import { toEmbedUrl } from "@/lib/drive";
+import { VERSION_LABEL } from "@/lib/version";
 
 export function Shell({
   title,
@@ -10,15 +11,25 @@ export function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 sm:py-12">
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8 sm:py-12">
       <header className="mb-8 text-center">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         {subtitle && (
           <p className="mt-2 text-sm text-neutral-500">{subtitle}</p>
         )}
       </header>
-      {children}
+      <div className="flex-1">{children}</div>
+      <VersionFooter />
     </main>
+  );
+}
+
+/** 網頁底部版本標記，方便對照部署版本。 */
+export function VersionFooter() {
+  return (
+    <footer className="mt-10 pt-4 text-center text-[10px] text-neutral-400">
+      {VERSION_LABEL}
+    </footer>
   );
 }
 

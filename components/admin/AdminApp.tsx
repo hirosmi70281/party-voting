@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { config } from "@/lib/config";
-import { Notice } from "@/components/ui";
+import { Notice, VersionFooter } from "@/components/ui";
 import { adminApi, type DashboardData } from "./api";
 import {
   OverviewPanel,
@@ -108,6 +108,7 @@ export function AdminApp() {
           {tab === "settings" && <SettingsPanel data={data} reload={reload} />}
         </>
       )}
+      <VersionFooter />
     </main>
   );
 }
