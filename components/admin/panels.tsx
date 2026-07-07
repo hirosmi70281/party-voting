@@ -905,6 +905,39 @@ export function ResultsPanel({ data }: { data: DashboardData }) {
           </li>
           <li>總分 = 投票分 ＋ 神秘客分（同分時神秘客分高者優先）。</li>
         </ul>
+
+        {total > 0 && data.standings.results.length > 0 && (
+          <div className="mt-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <p className="mb-2 font-medium">帶入實際數字：</p>
+            <div className="space-y-2">
+              {data.standings.results.map((r) => (
+                <div key={r.team.id} className="text-xs">
+                  <p className="font-medium">
+                    #{r.rank}《{r.team.title}》
+                  </p>
+                  <p className="text-neutral-500">
+                    投票分 =（{r.voteCount} ÷ {total}）× {config.publicWeight} ={" "}
+                    <b className="text-neutral-700 dark:text-neutral-200">
+                      {r.publicScore}
+                    </b>
+                  </p>
+                  <p className="text-neutral-500">
+                    神秘客分 =（{r.judgeTotal} ÷ {JUDGE_MAX_TOTAL}）×{" "}
+                    {config.judgeWeight} ={" "}
+                    <b className="text-neutral-700 dark:text-neutral-200">
+                      {r.judgeScore}
+                    </b>
+                  </p>
+                  <p className="text-neutral-500">
+                    總分 = {r.publicScore} ＋ {r.judgeScore} ={" "}
+                    <b className="text-brand">{r.finalScore}</b>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <p className="mt-2 text-xs text-neutral-400">
           註：加分同仁的票已併入上面「該隊票數」與「有效票數」中，不另外計算。
         </p>
