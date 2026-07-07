@@ -87,6 +87,9 @@ export const adminApi = {
       }),
     );
   },
+  async resetVotes(): Promise<{ ok: true; clearedVotes: number }> {
+    return parse(await fetch("/api/admin/reset-votes", { method: "POST" }));
+  },
   async clearVoterTokens(scope: "unused" | "all") {
     return parse(
       await fetch("/api/admin/tokens", {

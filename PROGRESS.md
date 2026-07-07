@@ -32,6 +32,9 @@ _最後更新：2026-07-06_
 - 計分：公開投票 70% + 神秘客 30%，同分神秘客高者優先（`lib/scoring.ts`，已用辦法範例驗證）。
 - **測試模式**開關（設定分頁，可隨時開/關）：開啟時共用投票跳過同裝置防重複，方便手機測試；總覽會紅字提醒。
 - 投票/結果開關；即時排行榜；後台有「首頁」連結；**每頁底部版本標記**（`v1.0 · git sha`）。
+- **清空票數**（設定分頁危險操作區）：一鍵把公開票歸零、投票券重置為未使用、加分票分配清空；
+  神秘客評分不受影響。用於正式活動前清掉測試累積的票。
+- **結果分頁顯示總票數算法**：有效票數 = 一般同仁投票票數 ＋ 加分同仁票數，並列出投票分/神秘客分公式。
 
 ## 計分規則（來自 reference/）
 
@@ -57,8 +60,9 @@ Vercel → Settings → Deployment Protection → **Vercel Authentication 必須
 
 ## ⚠️ 待辦 / 注意
 
-- **正式活動前清掉測試資料 + 關閉測試模式**（後台刪測試隊、清投票券；設定關測試模式）。
-  註：目前沒有「一鍵清空票數」按鈕；重建隊伍會一併清掉該隊票數。需要的話可再加。
+- **正式活動前清掉測試資料 + 關閉測試模式**：到「設定」分頁按**「清空票數」**（票數歸零，
+  投票券/加分票分配一併重置；神秘客評分要另到「神秘客」分頁按「清除重來」），並關閉測試模式。
+  註：⚠️ 刪投票券**不會**讓票數歸零——共用不記名投票的票是獨立累計的，要用「清空票數」才會歸零。
 - QR/連結一律從**穩定網址**操作（別用帶 deploy hash 的預覽網址，會失效）。
 - 影片由其他部門處理，非本系統負責。
 
@@ -66,7 +70,7 @@ Vercel → Settings → Deployment Protection → **Vercel Authentication 必須
 
 - 本機開發：`npm run dev`（`KV_PROVIDER=memory`，免帳號）。測試腳本：
   `scripts/verify-scoring.ts`、`scripts/e2e.py`、`scripts/e2e_bonus.py`、`scripts/e2e_shared.py`、
-  `scripts/e2e_judge_anon.py`（各腳本需先啟動 dev server 於 3100，且記憶體會累積、跑前最好重啟）。
+  `scripts/e2e_judge_anon.py`、`scripts/e2e_reset.py`（各腳本需先啟動 dev server 於 3100，且記憶體會累積、跑前最好重啟）。
 - 改 code → commit → `git push` → Vercel 自動部署。
 - **git 身份**：這 repo 用 `hirosmi70281`（repo-local 已設）。push 前若 403，先
   `gh auth switch --hostname github.com --user hirosmi70281`（`git push`/`gh auth switch`

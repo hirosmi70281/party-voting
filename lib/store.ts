@@ -149,6 +149,36 @@ export async function deleteVoterToken(token: string): Promise<ActionResult> {
   return ok(undefined);
 }
 
+/**
+ * 清空所有投票票數（重置以便正式開始）：
+ *  - 公開投票票數（含共用不記名）歸零
+ *  - 投票券使用狀態全部重置為未使用（保留投票券本身）
+ *  - 加分同仁的分配清空（保留加分同仁本身）
+ * 神秘客評分不受影響（另有「清除重來」）。回傳被清掉的公開票總數。
+ */
+export async function clearAllVotes(): Promise<{ clearedVotes: number }> {
+  const kv = await getKv();
+  const counts = await kv.hGetAllNumbers(K_VOTES);
+  const clearedVotes = Object.values(counts).reduce((a, b) => a + b, 0);
+  await kv.del(K_VOTES);
+  await kv.del(K_VOTER_USED);
+  // 投票券：清掉已投狀態，讓它們可重新使用
+  const tokens = await listVoterTokens();
+  for (const t of tokens) {
+    if (t.usedAt || t.votes.length) {
+      await kv.hSetJSON(K_VOTERS, t.token, { ...t, usedAt: null, votes: [] });
+    }
+  }
+  // 加分同仁：清掉分配（人保留）
+  const voters = await listBonusVoters();
+  for (const bv of voters) {
+    if (Object.keys(bv.allocations).length) {
+      await kv.hSetJSON(K_BONUS, bv.id, { ...bv, allocations: {} });
+    }
+  }
+  return { clearedVotes };
+}
+
 /** 批次清除投票券：scope="unused" 只清未使用；"all" 全部清（含已投的，票數會扣回）。 */
 export async function clearVoterTokens(
   scope: "unused" | "all",

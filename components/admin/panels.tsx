@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { config, JUDGE_MAX_PER_JUDGE, type JudgeCriterionKey } from "@/lib/config";
+import {
+  config,
+  JUDGE_MAX_PER_JUDGE,
+  JUDGE_MAX_TOTAL,
+  type JudgeCriterionKey,
+} from "@/lib/config";
 import type { Team, BonusVoter } from "@/lib/types";
+import { round1 } from "@/lib/scoring";
 import { Notice } from "@/components/ui";
 import { StandingsTable } from "@/components/StandingsTable";
 import { QrImg, CopyLink } from "./QrImg";
@@ -583,6 +589,69 @@ export function SettingsPanel({
         on={data.settings.testMode}
         onToggle={(v) => toggle({ testMode: v })}
       />
+
+      <ResetVotesRow data={data} reload={reload} />
+    </div>
+  );
+}
+
+// 危險操作：清空所有投票票數（正式活動前把測試票歸零用）
+function ResetVotesRow({
+  data,
+  reload,
+}: {
+  data: DashboardData;
+  reload: () => Promise<void>;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const current = data.standings.totalValidVotes;
+
+  async function reset() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await adminApi.resetVotes();
+      await reload();
+      setArmed(false);
+      setMsg(`已清空 ${r.clearedVotes} 張公開票，總票數歸零。`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/20">
+      <p className="font-medium text-red-700 dark:text-red-400">
+        清空所有投票票數
+      </p>
+      <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+        把<b>公開投票票數歸零</b>、投票券重置為未使用、加分同仁分配清空。
+        <b>神秘客評分不受影響</b>（要清神秘客請到「神秘客」分頁按「清除重來」）。
+        正式活動前，用這個把測試累積的票清乾淨。目前有效票數 <b>{current}</b> 張。
+      </p>
+      {msg && (
+        <p className="mt-2 text-sm text-red-700 dark:text-red-400">{msg}</p>
+      )}
+      <div className="mt-3 flex gap-2">
+        {armed ? (
+          <>
+            <Btn tone="danger" small onClick={reset} disabled={busy}>
+              {busy ? "清空中…" : "確定清空票數（不可復原）"}
+            </Btn>
+            <Btn tone="neutral" small onClick={() => setArmed(false)} disabled={busy}>
+              取消
+            </Btn>
+          </>
+        ) : (
+          <Btn tone="danger" small onClick={() => setArmed(true)}>
+            清空票數
+          </Btn>
+        )}
+      </div>
     </div>
   );
 }
@@ -805,5 +874,41 @@ function BonusCard({
 
 // ── 結果 ──────────────────────────────────────────────────
 export function ResultsPanel({ data }: { data: DashboardData }) {
-  return <StandingsTable standings={data.standings} />;
+  const total = data.standings.totalValidVotes;
+  const bonusTotal = data.bonusVoters.reduce(
+    (s, bv) =>
+      s + Object.values(bv.allocations).reduce((a, n) => a + (n || 0), 0),
+    0,
+  );
+  const sharedTotal = total - bonusTotal;
+  return (
+    <div className="space-y-4">
+      <StandingsTable standings={data.standings} />
+
+      <div className="rounded-xl border border-neutral-200 p-4 text-sm dark:border-neutral-800">
+        <p className="mb-2 font-semibold">總票數怎麼算的？</p>
+        <ul className="space-y-1 text-neutral-600 dark:text-neutral-300">
+          <li>
+            <b>有效票數合計 {total} 票</b>＝所有隊伍得票加總（表格「票數」欄的總和）。
+          </li>
+          <li>
+            　＝ 一般同仁投票 <b>{sharedTotal}</b> 票（每人 {config.votesPerBallot} 票，
+            約 {round1(sharedTotal / config.votesPerBallot)} 人）
+            ＋ 加分同仁 <b>{bonusTotal}</b> 票。
+          </li>
+          <li>
+            投票分 =（該隊票數 ÷ {total || 1}）× {config.publicWeight}
+          </li>
+          <li>
+            神秘客分 =（兩位神秘客該隊 5 項總分 ÷ {JUDGE_MAX_TOTAL}）×{" "}
+            {config.judgeWeight}
+          </li>
+          <li>總分 = 投票分 ＋ 神秘客分（同分時神秘客分高者優先）。</li>
+        </ul>
+        <p className="mt-2 text-xs text-neutral-400">
+          註：加分同仁的票已併入上面「該隊票數」與「有效票數」中，不另外計算。
+        </p>
+      </div>
+    </div>
+  );
 }
